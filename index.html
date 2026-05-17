@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Avaya CMS Report Analyzer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-deep:#06101e; --bg-base:#0b1928; --bg-card:#0f2035; --bg-card-2:#132540;
+      --accent:#1de9d8; --accent-dim:rgba(29,233,216,0.12); --accent-glow:rgba(29,233,216,0.18);
+      --text-hi:#ddeeff; --text-mid:#7a9cc0; --text-lo:#3a5470;
+      --border:rgba(255,255,255,0.06); --border-acc:rgba(29,233,216,0.22);
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    body{background:var(--bg-deep);color:var(--text-hi);font-family:'Inter',sans-serif;min-height:100vh;overflow-x:hidden;}
+    #bg-canvas{position:fixed;inset:0;z-index:0;pointer-events:none;}
+    .grid-overlay{position:fixed;inset:0;z-index:1;pointer-events:none;background-image:linear-gradient(rgba(255,255,255,0.022) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.022) 1px,transparent 1px);background-size:68px 68px;}
+    .grain-overlay{position:fixed;inset:0;z-index:2;pointer-events:none;opacity:0.035;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:200px 200px;}
+    .layer{position:relative;z-index:10;}
+    h1,h2,h3,.serif{font-family:'Playfair Display',serif;}
+    #drop-zone{border:1.5px dashed rgba(29,233,216,0.28);transition:border-color 0.18s ease,background 0.18s ease;cursor:pointer;}
+    #drop-zone:hover{border-color:var(--accent);background:rgba(29,233,216,0.04);}
+    #drop-zone.drag-over{border-color:var(--accent);background:rgba(29,233,216,0.07);}
+    .card{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;box-shadow:0 1px 2px rgba(0,0,0,0.5),0 6px 20px rgba(0,0,0,0.4),0 24px 60px rgba(0,0,0,0.25),0 0 0 1px rgba(255,255,255,0.04);}
+    .card-accent{background:var(--bg-card);border:1px solid var(--border-acc);border-radius:16px;box-shadow:0 1px 2px rgba(0,0,0,0.5),0 6px 20px rgba(0,0,0,0.4),0 0 0 1px rgba(29,233,216,0.12),0 0 50px rgba(29,233,216,0.05);}
+    .btn-primary{display:inline-flex;align-items:center;gap:6px;background:var(--accent);color:#06101e;font-family:'Inter',sans-serif;font-weight:600;font-size:13px;padding:9px 20px;border-radius:8px;border:none;cursor:pointer;box-shadow:0 0 24px rgba(29,233,216,0.28);transition:opacity 0.15s ease,transform 0.15s ease;}
+    .btn-primary:hover{opacity:0.88;transform:translateY(-1px);}
+    .btn-primary:active{opacity:0.75;transform:translateY(0);}
+    .btn-primary:focus-visible{outline:2px solid var(--accent);outline-offset:3px;}
+    .btn-ghost{display:inline-flex;align-items:center;gap:6px;background:transparent;color:var(--text-mid);font-family:'Inter',sans-serif;font-size:13px;font-weight:500;padding:7px 14px;border-radius:8px;border:1px solid var(--border);cursor:pointer;transition:color 0.15s ease,border-color 0.15s ease,transform 0.15s ease;}
+    .btn-ghost:hover{color:var(--text-hi);border-color:rgba(255,255,255,0.16);transform:translateY(-1px);}
+    .btn-ghost:active{transform:translateY(0);}
+    .btn-ghost:focus-visible{outline:2px solid var(--accent);outline-offset:3px;}
+    .preview-card{background:#eef3fa;border-radius:14px;color:#1a2a45;box-shadow:0 8px 32px rgba(0,0,0,0.55),0 0 0 1px rgba(255,255,255,0.12);}
+    @keyframes float-preview{0%,100%{transform:translateY(0) rotate(-1.5deg);}50%{transform:translateY(-12px) rotate(-1.5deg);}}
+    .float-preview{animation:float-preview 5.5s ease-in-out infinite;}
+    .stat-card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:18px 20px;box-shadow:0 2px 10px rgba(0,0,0,0.35),0 0 0 1px rgba(255,255,255,0.03);}
+    .chart-card{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:24px;box-shadow:0 2px 10px rgba(0,0,0,0.35),0 0 0 1px rgba(255,255,255,0.03);}
+    .data-table{width:100%;border-collapse:collapse;}
+    .data-table th{background:rgba(255,255,255,0.04);color:var(--text-mid);font-size:11px;text-transform:uppercase;letter-spacing:0.09em;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap;}
+    .data-table td{padding:9px 14px;font-size:12px;border-bottom:1px solid rgba(255,255,255,0.03);color:var(--text-hi);white-space:nowrap;}
+    .data-table tr:last-child td{border-bottom:none;}
+    .data-table tbody tr:hover td{background:rgba(255,255,255,0.025);}
+    .td-num{text-align:right;font-variant-numeric:tabular-nums;}
+    .td-hi{color:var(--accent);font-weight:600;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+    .spinner{width:18px;height:18px;border:2px solid rgba(29,233,216,0.2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.75s linear infinite;flex-shrink:0;}
+    ::-webkit-scrollbar{width:5px;height:5px;}
+    ::-webkit-scrollbar-track{background:transparent;}
+    ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:3px;}
+    #dashboard-screen{display:none;}
+    .search-input{background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:8px;padding:7px 14px;font-size:13px;color:var(--text-hi);font-family:'Inter',sans-serif;width:220px;outline:none;transition:border-color 0.15s ease;}
+    .search-input:focus{border-color:var(--accent);}
+    .search-input::placeholder{color:var(--text-lo);}
+    .badge{display:inline-block;font-size:11px;font-weight:700;letter-spacing:0.06em;padding:3px 10px;border-radius:20px;}
+    .badge-accent{background:rgba(29,233,216,0.12);color:var(--accent);}
+    .badge-ok{background:rgba(52,211,153,0.12);color:#34d399;}
+    .badge-warn{background:rgba(251,191,36,0.12);color:#fbbf24;}
+    .badge-danger{background:rgba(248,113,113,0.12);color:#f87171;}
+    .progress-bar{height:6px;border-radius:3px;background:rgba(255,255,255,0.06);overflow:hidden;}
+    .progress-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--accent),rgba(29,233,216,0.6));}
+    @media print{#bg-canvas,.grid-overlay,.grain-overlay{display:none;}body{background:white;color:black;}.card,.stat-card,.chart-card{background:white;border:1px solid #ddd;box-shadow:none;}.btn-primary,.btn-ghost,#dashboard-header{display:none;}.data-table th{color:#555;background:#f5f5f5;}.data-table td{color:black;}}
+  </style>
+</head>
+<body>
+<canvas id="bg-canvas"></canvas>
+<div class="grid-overlay"></div>
+<div class="grain-overlay"></div>
+
+<!-- ===== UPLOAD SCREEN ===== -->
+<div id="upload-screen" class="layer min-h-screen flex items-center">
+  <div class="w-full max-w-7xl mx-auto px-6">
+    <div class="grid lg:grid-cols-12 gap-10 items-center min-h-screen py-16">
+      <div class="lg:col-span-7 flex flex-col justify-center">
+        <div style="margin-bottom:28px;">
+          <span style="
+            font-size:17px;
+            font-weight:700;
+            letter-spacing:0.28em;
+            color:var(--accent);
+            text-transform:uppercase;
+            text-shadow:
+              0 0 8px rgba(29,233,216,0.9),
+              0 0 20px rgba(29,233,216,0.65),
+              0 0 45px rgba(29,233,216,0.4),
+              0 0 80px rgba(29,233,216,0.2);
+          ">Avaya CMS &nbsp;&middot;&nbsp; Report Analyzer</span>
+        </div>
+        <h1 style="font-family:'Playfair Display',serif;font-size:clamp(42px,5.8vw,76px);font-weight:900;line-height:1.04;letter-spacing:-0.03em;color:var(--text-hi);margin-bottom:22px;">Upload.<br>Analyze.<br><em style="color:var(--accent);font-style:normal;">Visualize.</em></h1>
+        <p style="font-size:16px;line-height:1.75;color:var(--text-mid);max-width:500px;margin-bottom:40px;">Drop any Avaya CMS Excel export. <strong style="color:var(--text-hi);font-weight:500;">Auto-detects the report type</strong> — Agent, Skill, VDN, Trunk, Login/Logout, AUX, and more.</p>
+        <div class="card-accent" style="max-width:560px;overflow:hidden;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 20px;border-bottom:1px solid var(--border);">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:32px;height:32px;background:var(--accent-dim);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              </div>
+              <span style="font-weight:600;font-size:14px;color:var(--text-hi);">Upload Excel Report</span>
+            </div>
+            <span style="font-size:11px;font-weight:700;letter-spacing:0.06em;color:var(--text-mid);background:rgba(255,255,255,0.06);padding:3px 10px;border-radius:20px;">.XLSX &nbsp;·&nbsp; .XLS</span>
+          </div>
+          <div style="padding:16px;">
+            <div id="drop-zone" style="border-radius:10px;padding:38px 24px;text-align:center;background:rgba(255,255,255,0.015);"
+              onclick="document.getElementById('file-input').click()" role="button" tabindex="0"
+              onkeydown="if(event.key==='Enter'||event.key===' ')document.getElementById('file-input').click()">
+              <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none" />
+              <div style="width:50px;height:50px;margin:0 auto 16px;background:var(--accent-dim);border-radius:14px;display:flex;align-items:center;justify-content:center;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+              </div>
+              <p style="font-weight:600;font-size:15px;color:var(--text-hi);margin-bottom:5px;">Drag &amp; drop your file here</p>
+              <p style="font-size:13px;color:var(--text-mid);margin-bottom:6px;">or click to browse</p>
+              <p style="font-size:12px;color:var(--text-lo);">Supports all Avaya CMS report exports (.xlsx, .xls)</p>
+            </div>
+          </div>
+          <div id="upload-status" style="display:none;padding:0 16px 16px;">
+            <div style="background:rgba(29,233,216,0.07);border:1px solid rgba(29,233,216,0.2);border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:10px;">
+              <div class="spinner"></div>
+              <span id="status-text" style="font-size:13px;color:var(--text-mid);">Reading file…</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:7px;padding:12px 20px;border-top:1px solid var(--border);">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-lo)" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <span style="font-size:12px;color:var(--text-lo);">Processed entirely in your browser. Never uploaded to any server.</span>
+          </div>
+        </div>
+        <!-- Supported report types list -->
+        <div style="margin-top:28px;max-width:560px;">
+          <p style="font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-lo);margin-bottom:10px;">Supported report types</p>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">
+            ${['Agent Individual','Agent Summary','Agent Attendance','Agent Split/Skill','Agent Login/Logout','Agent AUX Time','Skill/Split Summary','VDN Summary','Trunk Group','Agent Trace'].map(t=>`<span style="font-size:11px;color:var(--text-mid);background:rgba(255,255,255,0.05);border:1px solid var(--border);padding:3px 10px;border-radius:20px;">${t}</span>`).join('')}
+          </div>
+        </div>
+      </div>
+      <!-- RIGHT preview -->
+      <div class="lg:col-span-5 hidden lg:flex flex-col items-center justify-center gap-4">
+        <div style="width:100%;max-width:360px;text-align:right;margin-bottom:6px;"><span style="font-size:12px;color:var(--text-lo);">Example output</span></div>
+        <div style="display:flex;align-items:center;gap:10px;width:100%;max-width:360px;justify-content:flex-end;margin-bottom:8px;">
+          <span style="font-family:'Playfair Display',serif;font-size:30px;font-weight:700;color:var(--text-hi);">58</span>
+          <span class="badge badge-ok">ACD Calls</span>
+          <span style="font-size:12px;font-weight:600;color:var(--text-mid);letter-spacing:0.1em;text-transform:uppercase;">87% SL</span>
+        </div>
+        <div class="preview-card float-preview" style="width:100%;max-width:360px;padding:22px;">
+          <div style="padding-bottom:14px;border-bottom:2.5px solid var(--accent);margin-bottom:16px;">
+            <h3 style="font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:#1a2a45;">Agent Performance</h3>
+            <p style="font-size:12px;color:#6b80a0;margin-top:3px;">April 2026 &nbsp;·&nbsp; Auto-detected</p>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px;">
+            <div style="background:#e4edf8;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:17px;font-weight:700;color:#1a2a45;">142</div><div style="font-size:9px;color:#6b80a0;text-transform:uppercase;letter-spacing:0.06em;">ACD Calls</div></div>
+            <div style="background:#e0f8f5;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:17px;font-weight:700;color:#0d9488;">7:08</div><div style="font-size:9px;color:#6b80a0;text-transform:uppercase;letter-spacing:0.06em;">Avg AHT</div></div>
+            <div style="background:#fef3e2;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:17px;font-weight:700;color:#d97706;">64%</div><div style="font-size:9px;color:#6b80a0;text-transform:uppercase;letter-spacing:0.06em;">Occupancy</div></div>
+          </div>
+          <div style="margin-bottom:14px;">
+            <div style="font-size:10px;font-weight:700;color:#0d9488;text-transform:uppercase;letter-spacing:0.09em;margin-bottom:8px;">ACD CALLS BY AGENT</div>
+            <div style="display:flex;align-items:flex-end;gap:4px;height:44px;">
+              <div style="flex:1;background:rgba(29,233,216,0.5);height:55%;border-radius:2px;"></div>
+              <div style="flex:1;background:rgba(29,233,216,1);height:100%;border-radius:2px;"></div>
+              <div style="flex:1;background:rgba(29,233,216,0.7);height:72%;border-radius:2px;"></div>
+              <div style="flex:1;background:rgba(29,233,216,0.4);height:45%;border-radius:2px;"></div>
+              <div style="flex:1;background:rgba(29,233,216,0.6);height:62%;border-radius:2px;"></div>
+              <div style="flex:1;background:rgba(29,233,216,0.3);height:32%;border-radius:2px;"></div>
+            </div>
+          </div>
+          <div style="filter:blur(2.5px);opacity:0.55;user-select:none;">
+            <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:4px;padding-bottom:5px;border-bottom:1px solid #cdd8e8;margin-bottom:5px;">
+              <span style="font-size:10px;font-weight:700;color:#6b80a0;text-transform:uppercase;">Agent</span>
+              <span style="font-size:10px;font-weight:700;color:#6b80a0;text-transform:uppercase;">Calls</span>
+              <span style="font-size:10px;font-weight:700;color:#6b80a0;text-transform:uppercase;">AHT</span>
+              <span style="font-size:10px;font-weight:700;color:#6b80a0;text-transform:uppercase;">Occ%</span>
+            </div>
+            <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:4px;padding:4px 0;"><span style="font-size:11px;color:#2d3f5e;">A. Angeles</span><span style="font-size:11px;color:#2d3f5e;">8</span><span style="font-size:11px;color:#2d3f5e;">7:08</span><span style="font-size:11px;color:#2d3f5e;">64%</span></div>
+            <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:4px;padding:4px 0;"><span style="font-size:11px;color:#2d3f5e;">D. Samson</span><span style="font-size:11px;color:#2d3f5e;">12</span><span style="font-size:11px;color:#2d3f5e;">5:44</span><span style="font-size:11px;color:#2d3f5e;">71%</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== DASHBOARD SCREEN ===== -->
+<div id="dashboard-screen" class="layer min-h-screen">
+  <div id="dashboard-header" style="position:sticky;top:0;z-index:50;background:rgba(6,16,30,0.85);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--border);padding:13px 28px;display:flex;align-items:center;justify-content:space-between;">
+    <div style="display:flex;align-items:center;gap:14px;">
+      <button class="btn-ghost" onclick="goBack()" style="padding:6px 12px;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="15 18 9 12 15 6"/></svg>Back
+      </button>
+      <span style="width:1px;height:18px;background:var(--border);display:block;"></span>
+      <span id="file-name-display" style="font-size:13px;color:var(--text-mid);max-width:500px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span id="report-type-badge" class="badge badge-accent">ANALYZING</span>
+      <button class="btn-ghost" onclick="window.print()" style="padding:8px 16px;font-size:13px;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Print
+      </button>
+      <button class="btn-primary" id="save-pdf-btn" onclick="savePDF()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Save PDF
+      </button>
+    </div>
+  </div>
+  <div style="max-width:1440px;margin:0 auto;padding:36px 28px 80px;">
+    <div style="margin-bottom:32px;">
+      <h1 id="dashboard-title" class="serif" style="font-size:30px;font-weight:700;letter-spacing:-0.025em;color:var(--text-hi);margin-bottom:6px;"></h1>
+      <p id="dashboard-subtitle" style="font-size:14px;color:var(--text-mid);line-height:1.7;"></p>
+    </div>
+    <div id="dashboard-content"></div>
+  </div>
+</div>
+
+<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script>
+// ================================================================
+// BACKGROUND ANIMATION
+// ================================================================
+(function(){
+  const canvas=document.getElementById('bg-canvas'),ctx=canvas.getContext('2d');
+  function resize(){canvas.width=window.innerWidth;canvas.height=window.innerHeight;}
+  resize();window.addEventListener('resize',resize);
+  const orbs=[
+    {x:0.18,y:0.32,vx:0.000095,vy:0.000130,r:0.38,c:'rgba(12,28,72,0.65)'},
+    {x:0.72,y:0.18,vx:-0.000110,vy:0.000095,r:0.30,c:'rgba(18,52,112,0.40)'},
+    {x:0.48,y:0.78,vx:0.000080,vy:-0.000110,r:0.34,c:'rgba(8,22,60,0.55)'},
+    {x:0.88,y:0.68,vx:-0.000140,vy:-0.000075,r:0.26,c:'rgba(0,70,90,0.28)'},
+    {x:0.28,y:0.58,vx:0.000100,vy:0.000160,r:0.22,c:'rgba(29,233,216,0.055)'},
+    {x:0.60,y:0.42,vx:-0.000070,vy:0.000120,r:0.20,c:'rgba(40,100,180,0.22)'},
+  ];
+  function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    const bg=ctx.createRadialGradient(canvas.width*0.3,canvas.height*0.38,0,canvas.width*0.3,canvas.height*0.38,canvas.width*0.75);
+    bg.addColorStop(0,'#0d1e3c');bg.addColorStop(1,'#06101e');
+    ctx.fillStyle=bg;ctx.fillRect(0,0,canvas.width,canvas.height);
+    orbs.forEach(o=>{
+      o.x+=o.vx;o.y+=o.vy;
+      if(o.x<-0.1||o.x>1.1)o.vx*=-1;if(o.y<-0.1||o.y>1.1)o.vy*=-1;
+      const cx=o.x*canvas.width,cy=o.y*canvas.height,rad=o.r*Math.max(canvas.width,canvas.height);
+      const g=ctx.createRadialGradient(cx,cy,0,cx,cy,rad);
+      g.addColorStop(0,o.c);g.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=g;ctx.fillRect(0,0,canvas.width,canvas.height);
+    });
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ================================================================
+// HELPERS
+// ================================================================
+function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function n(v){return parseFloat(v)||0;}
+function fmtSec(s){s=Math.round(n(s));if(s<0)s=0;const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;return h>0?h+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0'):m+':'+String(sec).padStart(2,'0');}
+function fmtHrs(s){return(n(s)/3600).toFixed(1)+'h';}
+function fmtNum(v){v=n(v);if(v>=1e6)return(v/1e6).toFixed(1)+'M';if(v>=1e3)return(v/1e3).toFixed(1)+'K';return Number.isInteger(v)?String(v):v.toFixed(1);}
+function pct(v){return(n(v)*100).toFixed(1)+'%';}
+function fmtDate(v){if(!v)return'';if(v instanceof Date)return v.toLocaleDateString('en-US',{month:'short',day:'numeric'});const d=new Date(v);return!isNaN(d.getTime())?d.toLocaleDateString('en-US',{month:'short',day:'numeric'}):String(v);}
+
+const COLORS=['rgba(29,233,216,0.85)','rgba(251,191,36,0.85)','rgba(167,139,250,0.85)','rgba(248,113,113,0.85)','rgba(52,211,153,0.85)','rgba(251,146,60,0.85)','rgba(96,165,250,0.85)','rgba(236,72,153,0.85)'];
+
+function cDefaults(yFmt,legend){
+  const o={responsive:true,maintainAspectRatio:false,plugins:{legend:legend||{display:false},tooltip:{backgroundColor:'rgba(6,16,30,0.95)',titleColor:'rgba(255,255,255,0.9)',bodyColor:'rgba(255,255,255,0.65)',borderColor:'rgba(29,233,216,0.25)',borderWidth:1,padding:10}},scales:{x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'rgba(255,255,255,0.38)',font:{size:10},maxRotation:45},border:{color:'rgba(255,255,255,0.05)'}},y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'rgba(255,255,255,0.38)',font:{size:10}},border:{color:'rgba(255,255,255,0.05)'}}}};
+  if(yFmt)o.scales.y.ticks.callback=yFmt;
+  return o;
+}
+function mkCard(title,h=230){const d=document.createElement('div');d.className='chart-card';d.innerHTML=`<h3 class="serif" style="font-size:15px;font-weight:700;color:var(--text-hi);margin-bottom:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(title)}</h3><div style="position:relative;height:${h}px;"><canvas></canvas></div>`;return d;}
+const activeCharts=[];
+function reg(c){activeCharts.push(c);return c;}
+function destroyAll(){activeCharts.forEach(c=>c.destroy());activeCharts.length=0;}
+
+// ================================================================
+// COLUMN METADATA  — maps lowercase column name → type & formatter
+// ================================================================
+const COL_META = {
+  // counts (sum)
+  'acd calls':              {type:'count',  fmt:v=>fmtNum(v),  stat:'sum',  pri:10},
+  'calls offered':          {type:'count',  fmt:v=>fmtNum(v),  stat:'sum',  pri:10},
+  'aban calls':             {type:'count',  fmt:v=>fmtNum(v),  stat:'sum',  pri:9},
+  'answered within 20sec':  {type:'count',  fmt:v=>fmtNum(v),  stat:'sum',  pri:8},
+  'extn in calls':          {type:'count',  fmt:v=>fmtNum(v),  stat:'sum',  pri:7},
+  'extn out calls':         {type:'count',  fmt:v=>fmtNum(v),  stat:'sum',  pri:7},
+  'held calls':             {type:'count',  fmt:v=>fmtNum(v),  stat:'sum',  pri:5},
+  'trans out':              {type:'count',  fmt:v=>fmtNum(v),  stat:'sum',  pri:5},
+  'flow in':                {type:'count',  fmt:v=>fmtNum(v),  stat:'sum',  pri:4},
+  'flow out':               {type:'count',  fmt:v=>fmtNum(v),  stat:'sum',  pri:4},
+  'dequeued calls':         {type:'count',  fmt:v=>fmtNum(v),  stat:'sum',  pri:4},
+  'ccs':                    {type:'count',  fmt:v=>fmtNum(v),  stat:'sum',  pri:8},
+  // avg times (avg, shown as M:SS)
+  'avg acd time':           {type:'avg-time',fmt:fmtSec, stat:'avg', pri:10},
+  'avg acw time':           {type:'avg-time',fmt:fmtSec, stat:'avg', pri:8},
+  'aht':                    {type:'avg-time',fmt:fmtSec, stat:'avg', pri:10},
+  'avg speed ans':          {type:'avg-time',fmt:fmtSec, stat:'avg', pri:9},
+  'avg aban time':          {type:'avg-time',fmt:fmtSec, stat:'avg', pri:7},
+  'avg hold time':          {type:'avg-time',fmt:fmtSec, stat:'avg', pri:6},
+  'avg extn in time':       {type:'avg-time',fmt:fmtSec, stat:'avg', pri:5},
+  'avg extn out time':      {type:'avg-time',fmt:fmtSec, stat:'avg', pri:5},
+  'max delay':              {type:'avg-time',fmt:fmtSec, stat:'max', pri:6},
+  // total times (sum, shown as H.Xh)
+  'acd time':               {type:'total-time',fmt:fmtHrs,stat:'sum',pri:6},
+  'acw time':               {type:'total-time',fmt:fmtHrs,stat:'sum',pri:5},
+  'aux time':               {type:'total-time',fmt:fmtHrs,stat:'sum',pri:7},
+  'avail time':             {type:'total-time',fmt:fmtHrs,stat:'sum',pri:6},
+  'staffed time':           {type:'total-time',fmt:fmtHrs,stat:'sum',pri:6},
+  'ring time':              {type:'total-time',fmt:fmtHrs,stat:'sum',pri:4},
+  'other time':             {type:'total-time',fmt:fmtHrs,stat:'sum',pri:3},
+  'agent ring time':        {type:'total-time',fmt:fmtHrs,stat:'sum',pri:4},
+  'all trunks busy':        {type:'total-time',fmt:fmtHrs,stat:'sum',pri:7},
+  // fractions stored as 0–1, displayed as %
+  '% agent occup w/ acw':   {type:'pct-frac',fmt:pct,   stat:'avg', pri:9},
+  '% agent occup w/o acw':  {type:'pct-frac',fmt:pct,   stat:'avg', pri:9},
+  // already 0–100
+  '% skills avail':         {type:'pct-dir', fmt:v=>n(v).toFixed(1)+'%',stat:'avg',pri:5},
+};
+
+function colMeta(name){return COL_META[name.toLowerCase().trim()]||null;}
+
+// dimension columns used for grouping
+const DIM_KEYS=['agent name','agent','split/skill','skill','split','vdn name','vdn','trunk group','trunk','extension'];
+function isDim(name){const l=name.toLowerCase().trim();return DIM_KEYS.some(d=>l===d);}
+function isDate(name){return /^date$/i.test(name.trim());}
+
+// ================================================================
+// REPORT TYPE DETECTION
+// ================================================================
+function findHeaderRow(aoa){
+  for(let i=0;i<Math.min(12,aoa.length);i++){
+    const row=aoa[i];if(!row?.length)continue;
+    const strCells=row.filter(v=>typeof v==='string'&&v.trim().length>1&&isNaN(v.trim()));
+    if(strCells.length>=3)return{idx:i,headers:row.map(h=>String(h||'').trim())};
+  }
+  return null;
+}
+
+function detectByColumns(headers){
+  const hs=new Set(headers.map(h=>h.toLowerCase().trim()));
+  const has=(...cols)=>cols.every(c=>hs.has(c));
+  const hasAny=(...cols)=>cols.some(c=>hs.has(c));
+  const hasLike=pat=>headers.some(h=>new RegExp(pat,'i').test(h));
+  if(has('login time','logout time'))           return 'agent-login-logout';
+  if(has('sequence','state','duration'))        return 'agent-trace';
+  if(hasLike('aux time')&&hasLike('reason'))    return 'agent-aux';
+  if(hasAny('vdn','vdn name')&&hasAny('calls in','acd calls')) return 'vdn';
+  if(has('ccs')||has('all trunks busy'))        return 'trunk';
+  if(has('calls offered')&&has('aban calls'))   return 'skill-tabular';
+  if(hasAny('split/skill','skill')&&has('acd calls')&&hasAny('agent','agent name')) return 'agent-split-skill';
+  if(hasAny('agent','agent name')&&has('staffed time')&&has('acd calls')) return 'agent-attendance';
+  if(has('acd calls')&&hasAny('aht','avg acd time')) return 'agent-summary';
+  return 'generic';
+}
+
+const TYPE_LABELS={
+  'agent-individual':'AGENT INDIVIDUAL','skill-single':'SKILL REPORT',
+  'agent-summary':'AGENT SUMMARY','agent-attendance':'AGENT ATTENDANCE',
+  'agent-split-skill':'AGENT SKILL DETAIL','agent-login-logout':'LOGIN / LOGOUT',
+  'agent-aux':'AUX TIME REPORT','agent-trace':'AGENT TRACE',
+  'skill-tabular':'SKILL SUMMARY','vdn':'VDN REPORT','trunk':'TRUNK GROUP','generic':'REPORT',
+};
+const TYPE_TITLES={
+  'agent-individual':'Agent Performance Report','skill-single':'Skill / Split Report',
+  'agent-summary':'Agent Summary Report','agent-attendance':'Agent Attendance Report',
+  'agent-split-skill':'Agent Split/Skill Detail','agent-login-logout':'Agent Login / Logout Report',
+  'agent-aux':'Agent AUX Time Report','agent-trace':'Agent Trace Report',
+  'skill-tabular':'Skill / Split Summary','vdn':'VDN Summary Report','trunk':'Trunk Group Report','generic':'Report',
+};
+
+function detectType(wb){
+  const aoa=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''});
+  const c00=String(aoa[0]?.[0]||'').trim();
+  const c20=String(aoa[2]?.[0]||'').trim();
+  if(c00==='Agent:')return'agent-individual';
+  if(c20==='Split/Skill:')return'skill-single';
+  const hi=findHeaderRow(aoa);
+  if(hi)return detectByColumns(hi.headers);
+  return'generic';
+}
+
+// ================================================================
+// PARSERS
+// ================================================================
+function parseAgentIndividual(wb){
+  return wb.SheetNames.map(sName=>{
+    const aoa=XLSX.utils.sheet_to_json(wb.Sheets[sName],{header:1,defval:'',cellDates:true});
+    const agentName=String(aoa[0]?.[1]||sName).trim();
+    const dateRange=String(aoa[1]?.[1]||'').trim();
+    const headers=(aoa[3]||[]).map(h=>String(h).trim());
+    const totals={},daily=[];
+    for(let i=4;i<aoa.length;i++){
+      const row=aoa[i];if(!row?.length||row.every(v=>v===''||v==null))continue;
+      const rec={};headers.forEach((h,j)=>{rec[h]=row[j]??'';});
+      if(String(rec['Date']).trim()==='Totals')Object.assign(totals,rec);
+      else daily.push(rec);
+    }
+    return{agentName,dateRange,headers,totals,daily};
+  });
+}
+
+function parseSkillSingle(wb){
+  const aoa=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:'',cellDates:true});
+  const dateRange=String(aoa[0]?.[1]||'').trim();
+  const skillName=String(aoa[2]?.[1]||'Skill').trim();
+  const headers=(aoa[3]||[]).map(h=>String(h).trim());
+  const totals={},daily=[];
+  for(let i=4;i<aoa.length;i++){
+    const row=aoa[i];if(!row?.length||row.every(v=>v===''||v==null))continue;
+    const rec={};headers.forEach((h,j)=>{rec[h]=row[j]??'';});
+    if(String(rec['Date']).trim()==='Totals')Object.assign(totals,rec);
+    else daily.push(rec);
+  }
+  return{skillName,dateRange,headers,totals,daily};
+}
+
+function parseTabular(wb){
+  const results=[];
+  wb.SheetNames.forEach(sName=>{
+    const aoa=XLSX.utils.sheet_to_json(wb.Sheets[sName],{header:1,defval:'',cellDates:true});
+    const hi=findHeaderRow(aoa);if(!hi)return;
+    const{idx,headers}=hi;
+    const meta={};
+    // capture metadata rows above header (Dates:, Split/Skill:, etc.)
+    for(let i=0;i<idx;i++){const row=aoa[i];if(row[0]&&row[1])meta[String(row[0]).replace(':','').trim()]=String(row[1]).trim();}
+    const rows=[];
+    for(let i=idx+1;i<aoa.length;i++){
+      const row=aoa[i];if(!row?.length||row.every(v=>v===''||v==null))continue;
+      const rec={};headers.forEach((h,j)=>{rec[h]=row[j]??'';});
+      rows.push(rec);
+    }
+    results.push({sheetName:sName,headers,rows,meta});
+  });
+  return results;
+}
+
+// ================================================================
+// UPLOAD HANDLING
+// ================================================================
+const dropZone=document.getElementById('drop-zone'),fileInput=document.getElementById('file-input');
+dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('drag-over');});
+dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('drag-over');if(e.dataTransfer.files[0])processFile(e.dataTransfer.files[0]);});
+fileInput.addEventListener('change',e=>{if(e.target.files[0])processFile(e.target.files[0]);});
+
+function setStatus(t){document.getElementById('upload-status').style.display='block';document.getElementById('status-text').textContent=t;}
+
+function processFile(file){
+  if(!/\.(xlsx|xls)$/i.test(file.name)){alert('Please upload an Excel file (.xlsx or .xls)');return;}
+  setStatus('Reading '+file.name+'…');
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      setStatus('Parsing workbook…');
+      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true});
+      setStatus('Building dashboard…');
+      setTimeout(()=>buildDashboard(wb,file.name),250);
+    }catch(err){alert('Error reading file: '+err.message);document.getElementById('upload-status').style.display='none';}
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ================================================================
+// DASHBOARD ROUTER
+// ================================================================
+function buildDashboard(wb,fileName){
+  destroyAll();
+  const type=detectType(wb);
+  document.getElementById('upload-screen').style.display='none';
+  document.getElementById('dashboard-screen').style.display='block';
+  document.getElementById('file-name-display').textContent=fileName;
+  document.getElementById('report-type-badge').textContent=TYPE_LABELS[type]||'REPORT';
+  document.getElementById('dashboard-title').textContent=TYPE_TITLES[type]||'Report';
+  if(type==='agent-individual'){buildAgentIndividual(parseAgentIndividual(wb),fileName);}
+  else if(type==='skill-single'){buildSkillSingle(parseSkillSingle(wb),fileName);}
+  else{buildSmart(type,parseTabular(wb),fileName);}
+}
+
+// ================================================================
+// AGENT INDIVIDUAL DASHBOARD
+// ================================================================
+function buildAgentIndividual(agents,fileName){
+  const dateRange=agents[0]?.dateRange||'';
+  document.getElementById('dashboard-subtitle').textContent=dateRange+'  ·  '+agents.length+' agents  ·  '+fileName;
+  const content=document.getElementById('dashboard-content');content.innerHTML='';
+  const totalACD=agents.reduce((s,a)=>s+n(a.totals['ACD Calls']),0);
+  const avgAHT=agents.reduce((s,a)=>s+n(a.totals['AHT']),0)/agents.length;
+  const avgOcc=agents.reduce((s,a)=>s+n(a.totals['% Agent Occup w/o ACW']),0)/agents.length;
+  const totalExtOut=agents.reduce((s,a)=>s+n(a.totals['Extn Out Calls']),0);
+  const avgStaff=agents.reduce((s,a)=>s+n(a.totals['Staffed Time']),0)/agents.length;
+  const avgAux=agents.reduce((s,a)=>s+n(a.totals['AUX Time']),0)/agents.length;
+  const names=agents.map(a=>a.agentName.split(' ').slice(-1)[0]);
+
+  // stat cards
+  const sr=document.createElement('div');
+  sr.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-bottom:32px;';
+  sr.innerHTML=[
+    {v:agents.length,       l:'Agents',         s:'In this report'},
+    {v:fmtNum(totalACD),    l:'Total ACD Calls', s:'Team total',     hi:true},
+    {v:fmtNum(totalExtOut), l:'Extn Out Calls',  s:'Extension out'},
+    {v:fmtSec(avgAHT),      l:'Team Avg AHT',    s:'Avg Handle Time',hi:true},
+    {v:pct(avgOcc),         l:'Team Avg Occ.',   s:'w/o ACW'},
+    {v:fmtHrs(avgStaff),    l:'Avg Staffed',     s:'Per agent'},
+    {v:fmtHrs(avgAux),      l:'Avg AUX Time',    s:'Per agent'},
+  ].map(s=>`<div class="stat-card"><div style="font-size:10px;font-weight:700;color:var(--text-lo);text-transform:uppercase;letter-spacing:0.11em;margin-bottom:8px;">${esc(s.s)}</div><div class="serif" style="font-size:24px;font-weight:700;color:${s.hi?'var(--accent)':'var(--text-hi)'};margin-bottom:4px;">${esc(String(s.v))}</div><div style="font-size:12px;color:var(--text-mid);">${esc(s.l)}</div></div>`).join('');
+  content.appendChild(sr);
+
+  // charts
+  const cg=document.createElement('div');
+  cg.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:24px;margin-bottom:32px;';
+  content.appendChild(cg);
+
+  // ACD Calls bar
+  const c1=mkCard('ACD Calls by Agent');cg.appendChild(c1);
+  reg(new Chart(c1.querySelector('canvas'),{type:'bar',data:{labels:names,datasets:[{label:'ACD Calls',data:agents.map(a=>n(a.totals['ACD Calls'])),backgroundColor:COLORS,borderRadius:5,borderSkipped:false}]},options:cDefaults()}));
+
+  // AHT bar
+  const c2=mkCard('Avg Handle Time (AHT) by Agent');cg.appendChild(c2);
+  const o2=cDefaults(v=>fmtSec(v));o2.plugins.tooltip.callbacks={label:ctx=>fmtSec(ctx.parsed.y)};
+  reg(new Chart(c2.querySelector('canvas'),{type:'bar',data:{labels:names,datasets:[{label:'AHT',data:agents.map(a=>n(a.totals['AHT'])),backgroundColor:COLORS,borderRadius:5,borderSkipped:false}]},options:o2}));
+
+  // Occupancy bar
+  const c3=mkCard('Agent Occupancy % by Agent');cg.appendChild(c3);
+  const o3=cDefaults(v=>(v*100).toFixed(0)+'%');o3.plugins.tooltip.callbacks={label:ctx=>(ctx.parsed.y*100).toFixed(1)+'%'};
+  reg(new Chart(c3.querySelector('canvas'),{type:'bar',data:{labels:names,datasets:[{label:'Occupancy',data:agents.map(a=>n(a.totals['% Agent Occup w/o ACW'])),backgroundColor:COLORS,borderRadius:5,borderSkipped:false}]},options:o3}));
+
+  // Time breakdown stacked
+  const c4=mkCard('Time Breakdown by Agent (hours)',260);cg.appendChild(c4);
+  const o4=cDefaults(v=>fmtHrs(v),{display:true,labels:{color:'rgba(255,255,255,0.5)',font:{size:11}}});
+  o4.scales.x.stacked=true;o4.scales.y.stacked=true;o4.plugins.tooltip.callbacks={label:ctx=>ctx.dataset.label+': '+fmtHrs(ctx.parsed.y)};
+  reg(new Chart(c4.querySelector('canvas'),{type:'bar',data:{labels:names,datasets:[
+    {label:'ACD Time',   data:agents.map(a=>n(a.totals['ACD Time'])),   backgroundColor:'rgba(29,233,216,0.75)',stack:'t',borderRadius:3},
+    {label:'ACW Time',   data:agents.map(a=>n(a.totals['ACW Time'])),   backgroundColor:'rgba(96,165,250,0.75)',stack:'t',borderRadius:3},
+    {label:'AUX Time',   data:agents.map(a=>n(a.totals['AUX Time'])),   backgroundColor:'rgba(251,191,36,0.75)',stack:'t',borderRadius:3},
+    {label:'Avail Time', data:agents.map(a=>n(a.totals['Avail Time'])), backgroundColor:'rgba(52,211,153,0.35)',stack:'t',borderRadius:3},
+  ]},options:o4}));
+
+  // Daily trend
+  const allDates=[...new Set(agents.flatMap(a=>a.daily.map(d=>d['Date'])))].sort((a,b)=>new Date(a)-new Date(b));
+  if(allDates.length>=2){
+    const c5=mkCard('Daily ACD Calls — All Agents Combined');cg.appendChild(c5);
+    const sums=allDates.map(dt=>agents.reduce((s,a)=>{const r=a.daily.find(x=>x['Date']===dt);return s+(r?n(r['ACD Calls']):0);},0));
+    reg(new Chart(c5.querySelector('canvas'),{type:'line',data:{labels:allDates.map(fmtDate),datasets:[{label:'ACD Calls',data:sums,borderColor:'rgba(29,233,216,1)',backgroundColor:'rgba(29,233,216,0.08)',fill:true,tension:0.4,pointRadius:3,pointBackgroundColor:'rgba(29,233,216,1)'}]},options:cDefaults()}));
+  }
+
+  // Extn Out bar
+  const c6=mkCard('Extension Out Calls by Agent');cg.appendChild(c6);
+  reg(new Chart(c6.querySelector('canvas'),{type:'bar',data:{labels:names,datasets:[{label:'Extn Out',data:agents.map(a=>n(a.totals['Extn Out Calls'])),backgroundColor:COLORS.map(c=>c.replace('0.85','0.6')),borderRadius:5,borderSkipped:false}]},options:cDefaults()}));
+
+  // summary table
+  const maxACD=Math.max(...agents.map(a=>n(a.totals['ACD Calls'])));
+  const maxAHT=Math.max(...agents.map(a=>n(a.totals['AHT'])));
+  const tc=document.createElement('div');tc.className='chart-card';tc.style.marginBottom='24px';
+  tc.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;"><h2 class="serif" style="font-size:20px;font-weight:700;color:var(--text-hi);">Agent Summary — Totals</h2></div><div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Agent</th><th style="text-align:right;">ACD Calls</th><th>Bar</th><th style="text-align:right;">Avg ACD</th><th style="text-align:right;">AHT</th><th>Bar</th><th style="text-align:right;">Occupancy</th><th style="text-align:right;">AUX</th><th style="text-align:right;">Avail</th><th style="text-align:right;">Staffed</th><th style="text-align:right;">Extn Out</th></tr></thead><tbody>${agents.map(a=>{const t=a.totals,acd=n(t['ACD Calls']),aht=n(t['AHT']),occ=n(t['% Agent Occup w/o ACW']),ob=occ>=0.75?'badge-ok':occ>=0.5?'badge-warn':'badge-danger';return`<tr><td style="font-weight:600;color:var(--text-hi);min-width:150px;">${esc(a.agentName)}</td><td class="td-num td-hi">${acd}</td><td style="min-width:90px;padding:9px 14px;"><div class="progress-bar" style="width:90px;"><div class="progress-fill" style="width:${maxACD?Math.round(acd/maxACD*100):0}%;"></div></div></td><td class="td-num">${fmtSec(t['Avg ACD Time'])}</td><td class="td-num">${fmtSec(aht)}</td><td style="min-width:90px;padding:9px 14px;"><div class="progress-bar" style="width:90px;"><div class="progress-fill" style="width:${maxAHT?Math.round(aht/maxAHT*100):0}%;background:linear-gradient(90deg,rgba(251,191,36,0.9),rgba(251,191,36,0.5));"></div></div></td><td class="td-num"><span class="badge ${ob}" style="font-size:11px;">${(occ*100).toFixed(1)}%</span></td><td class="td-num">${fmtHrs(t['AUX Time'])}</td><td class="td-num">${fmtHrs(t['Avail Time'])}</td><td class="td-num">${fmtHrs(t['Staffed Time'])}</td><td class="td-num">${n(t['Extn Out Calls'])}</td></tr>`;}).join('')}</tbody></table></div>`;
+  content.appendChild(tc);
+
+  // collapsible daily per agent
+  const ds=document.createElement('div');
+  ds.innerHTML='<div style="font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent);margin-bottom:16px;">Daily Breakdown Per Agent</div>';
+  agents.forEach(a=>{
+    if(!a.daily.length)return;
+    const id='ag_'+a.agentName.replace(/\W/g,'_');
+    const ac=document.createElement('div');ac.className='chart-card';ac.style.marginBottom='14px';
+    ac.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;" onclick="tog('${id}')"><h3 class="serif" style="font-size:15px;font-weight:700;color:var(--text-hi);">${esc(a.agentName)}</h3><div style="display:flex;align-items:center;gap:10px;"><span style="font-size:12px;color:var(--text-mid);">${a.daily.length} days &nbsp;·&nbsp; ${n(a.totals['ACD Calls'])} ACD &nbsp;·&nbsp; AHT ${fmtSec(a.totals['AHT'])}</span><svg id="cv_${id}" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-mid)" stroke-width="2" style="transition:transform 0.2s ease;"><polyline points="6 9 12 15 18 9"/></svg></div></div><div id="${id}" style="display:none;overflow-x:auto;margin-top:16px;"><table class="data-table"><thead><tr><th>Date</th><th style="text-align:right;">ACD Calls</th><th style="text-align:right;">Avg ACD</th><th style="text-align:right;">AHT</th><th style="text-align:right;">Occupancy</th><th style="text-align:right;">Extn In</th><th style="text-align:right;">Extn Out</th><th style="text-align:right;">AUX</th><th style="text-align:right;">Avail</th></tr></thead><tbody>${a.daily.map(r=>`<tr><td>${esc(fmtDate(r['Date']))}</td><td class="td-num">${n(r['ACD Calls'])}</td><td class="td-num">${fmtSec(r['Avg ACD Time'])}</td><td class="td-num">${fmtSec(r['AHT'])}</td><td class="td-num">${(n(r['% Agent Occup w/o ACW'])*100).toFixed(1)}%</td><td class="td-num">${n(r['Extn In Calls'])}</td><td class="td-num">${n(r['Extn Out Calls'])}</td><td class="td-num">${fmtHrs(r['AUX Time'])}</td><td class="td-num">${fmtHrs(r['Avail Time'])}</td></tr>`).join('')}</tbody></table></div>`;
+    ds.appendChild(ac);
+  });
+  content.appendChild(ds);
+}
+
+// ================================================================
+// SKILL SINGLE DASHBOARD
+// ================================================================
+function buildSkillSingle(skill,fileName){
+  document.getElementById('dashboard-subtitle').textContent=skill.dateRange+'  ·  '+skill.skillName+'  ·  '+fileName;
+  const content=document.getElementById('dashboard-content');content.innerHTML='';
+  const t=skill.totals;
+  const offered=n(t['Calls Offered']),handled=n(t['ACD Calls']),aban=n(t['Aban Calls']),ansIn20=n(t['Answered within 20sec']);
+  const abanRate=offered>0?(aban/offered*100).toFixed(1):'0.0';
+  const sl=offered>0?(ansIn20/offered*100).toFixed(1):'0.0';
+  const dates=skill.daily.map(r=>fmtDate(r['Date']));
+
+  const sr=document.createElement('div');sr.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:14px;margin-bottom:32px;';
+  sr.innerHTML=[
+    {v:fmtNum(offered),         l:'Calls Offered',       s:'Total incoming'},
+    {v:fmtNum(handled),         l:'ACD Calls',           s:'Handled',hi:true},
+    {v:fmtNum(aban),            l:'Abandoned Calls',     s:abanRate+'% abandon rate'},
+    {v:sl+'%',                  l:'Service Level',       s:'Answered ≤ 20s',hi:true},
+    {v:fmtSec(t['Avg Speed Ans']),l:'Avg Speed of Answer',s:'ASA'},
+    {v:fmtSec(t['Avg ACD Time']),l:'Avg ACD Time',       s:'Avg Handle Time'},
+    {v:n(t['Extn Out Calls']),  l:'Extn Out Calls',      s:'Extension outbound'},
+  ].map(s=>`<div class="stat-card"><div style="font-size:10px;font-weight:700;color:var(--text-lo);text-transform:uppercase;letter-spacing:0.11em;margin-bottom:8px;">${esc(s.s)}</div><div class="serif" style="font-size:22px;font-weight:700;color:${s.hi?'var(--accent)':'var(--text-hi)'};margin-bottom:4px;">${esc(String(s.v))}</div><div style="font-size:12px;color:var(--text-mid);">${esc(s.l)}</div></div>`).join('');
+  content.appendChild(sr);
+
+  const cg=document.createElement('div');cg.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:24px;margin-bottom:32px;';content.appendChild(cg);
+
+  const o1=cDefaults(null,{display:true,labels:{color:'rgba(255,255,255,0.5)',font:{size:11}}});
+  const c1=mkCard('Daily Call Volume — Offered vs Handled vs Abandoned',240);cg.appendChild(c1);
+  reg(new Chart(c1.querySelector('canvas'),{type:'line',data:{labels:dates,datasets:[
+    {label:'Calls Offered',data:skill.daily.map(r=>n(r['Calls Offered'])),borderColor:'rgba(96,165,250,1)',backgroundColor:'rgba(96,165,250,0.06)',fill:true,tension:0.3,pointRadius:2},
+    {label:'ACD Calls',    data:skill.daily.map(r=>n(r['ACD Calls'])),    borderColor:'rgba(29,233,216,1)',backgroundColor:'rgba(29,233,216,0.06)',fill:true,tension:0.3,pointRadius:2},
+    {label:'Abandoned',    data:skill.daily.map(r=>n(r['Aban Calls'])),   borderColor:'rgba(248,113,113,1)',backgroundColor:'rgba(248,113,113,0.06)',fill:true,tension:0.3,pointRadius:2},
+  ]},options:o1}));
+
+  const c2=mkCard('Avg Speed of Answer (seconds) — Daily');cg.appendChild(c2);
+  const o2=cDefaults(v=>fmtSec(v));o2.plugins.tooltip.callbacks={label:ctx=>'ASA: '+fmtSec(ctx.parsed.y)};
+  reg(new Chart(c2.querySelector('canvas'),{type:'line',data:{labels:dates,datasets:[{label:'ASA',data:skill.daily.map(r=>n(r['Avg Speed Ans'])),borderColor:'rgba(251,191,36,1)',backgroundColor:'rgba(251,191,36,0.08)',fill:true,tension:0.4,pointRadius:3,pointBackgroundColor:'rgba(251,191,36,1)'}]},options:o2}));
+
+  const c3=mkCard('Daily Abandon Rate %');cg.appendChild(c3);
+  const o3=cDefaults(v=>v.toFixed(1)+'%');o3.plugins.tooltip.callbacks={label:ctx=>ctx.parsed.y.toFixed(1)+'%'};
+  reg(new Chart(c3.querySelector('canvas'),{type:'bar',data:{labels:dates,datasets:[{label:'Abandon %',data:skill.daily.map(r=>{const of=n(r['Calls Offered']);return of>0?(n(r['Aban Calls'])/of*100):0;}),backgroundColor:'rgba(248,113,113,0.7)',borderRadius:4}]},options:o3}));
+
+  const c4=mkCard('Service Level — Answered within 20s vs Offered');cg.appendChild(c4);
+  const o4=cDefaults(null,{display:true,labels:{color:'rgba(255,255,255,0.5)',font:{size:11}}});
+  reg(new Chart(c4.querySelector('canvas'),{type:'bar',data:{labels:dates,datasets:[
+    {label:'Calls Offered',   data:skill.daily.map(r=>n(r['Calls Offered'])),         backgroundColor:'rgba(96,165,250,0.4)',borderRadius:4},
+    {label:'Answered ≤ 20s', data:skill.daily.map(r=>n(r['Answered within 20sec'])), backgroundColor:'rgba(52,211,153,0.8)',borderRadius:4},
+  ]},options:o4}));
+
+  // daily table
+  const tc=document.createElement('div');tc.className='chart-card';
+  tc.innerHTML=`<div style="margin-bottom:20px;"><h2 class="serif" style="font-size:20px;font-weight:700;color:var(--text-hi);">Daily Breakdown</h2></div><div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Date</th><th style="text-align:right;">Offered</th><th style="text-align:right;">ACD</th><th style="text-align:right;">Aban</th><th style="text-align:right;">Aban%</th><th style="text-align:right;">Ans ≤20s</th><th style="text-align:right;">SL%</th><th style="text-align:right;">ASA</th><th style="text-align:right;">Avg ACD</th><th style="text-align:right;">Max Delay</th></tr></thead><tbody>${skill.daily.map(r=>{const of=n(r['Calls Offered']),ab=n(r['Aban Calls']),ans=n(r['Answered within 20sec']),abp=of>0?(ab/of*100).toFixed(1):'0.0',slp=of>0?(ans/of*100).toFixed(1):'0.0',sb=parseFloat(slp)>=80?'badge-ok':parseFloat(slp)>=60?'badge-warn':'badge-danger';return`<tr><td>${esc(fmtDate(r['Date']))}</td><td class="td-num">${of}</td><td class="td-num td-hi">${n(r['ACD Calls'])}</td><td class="td-num" style="color:rgba(248,113,113,0.9);">${ab}</td><td class="td-num">${abp}%</td><td class="td-num">${ans}</td><td class="td-num"><span class="badge ${sb}" style="font-size:11px;">${slp}%</span></td><td class="td-num">${fmtSec(r['Avg Speed Ans'])}</td><td class="td-num">${fmtSec(r['Avg ACD Time'])}</td><td class="td-num">${fmtSec(r['Max Delay'])}</td></tr>`;}).join('')}</tbody></table></div>`;
+  content.appendChild(tc);
+}
+
+// ================================================================
+// SMART / UNIVERSAL DASHBOARD  — handles all tabular report types
+// ================================================================
+function buildSmart(type,sheets,fileName){
+  const content=document.getElementById('dashboard-content');content.innerHTML='';
+  if(!sheets.length){content.innerHTML='<p style="color:var(--text-lo);">No data found.</p>';return;}
+
+  sheets.forEach((sheet,si)=>{
+    const{headers,rows,meta,sheetName}=sheet;
+    if(!rows.length)return;
+
+    // Separate totals row from data rows
+    const firstDimKey=headers.find(h=>isDim(h)||isDate(h))||headers[0];
+    const totalsRow=rows.find(r=>String(r[firstDimKey]||'').toLowerCase()==='totals');
+    const dataRows=rows.filter(r=>String(r[firstDimKey]||'').toLowerCase()!=='totals');
+
+    // Find date col, dimension col, metric cols
+    const dateCol=headers.find(h=>isDate(h));
+    const dimCol=headers.find(h=>isDim(h)&&!isDate(h));
+    const metricCols=headers
+      .filter(h=>colMeta(h))
+      .sort((a,b)=>(colMeta(b)?.pri||0)-(colMeta(a)?.pri||0));
+
+    // Subtitle
+    const metaStr=Object.entries(meta).map(([k,v])=>k+': '+v).join('  ·  ');
+    document.getElementById('dashboard-subtitle').textContent=(metaStr||sheetName)+'  ·  '+fileName;
+
+    // ---- STAT CARDS from totals row (or computed) ----
+    const sr=document.createElement('div');
+    sr.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-bottom:32px;';
+    const statCols=metricCols.slice(0,8);
+    const totalRowsCard=`<div class="stat-card"><div style="font-size:10px;font-weight:700;color:var(--text-lo);text-transform:uppercase;letter-spacing:0.11em;margin-bottom:8px;">Total Records</div><div class="serif" style="font-size:24px;font-weight:700;color:var(--text-hi);margin-bottom:4px;">${dataRows.length.toLocaleString()}</div><div style="font-size:12px;color:var(--text-mid);">${dimCol?'Rows':'Data rows'}</div></div>`;
+    const statCardsHtml=statCols.map(col=>{
+      const m=colMeta(col);if(!m)return'';
+      const vals=dataRows.map(r=>n(r[col])).filter(v=>!isNaN(v)&&isFinite(v));
+      if(!vals.length)return'';
+      let rawVal,subLabel;
+      if(m.stat==='sum')     {rawVal=vals.reduce((a,b)=>a+b,0);subLabel='Total';}
+      else if(m.stat==='avg'){rawVal=vals.reduce((a,b)=>a+b,0)/vals.length;subLabel='Average';}
+      else if(m.stat==='max'){rawVal=Math.max(...vals);subLabel='Maximum';}
+      else                   {rawVal=vals.reduce((a,b)=>a+b,0)/vals.length;subLabel='Average';}
+      // Use totals row if available
+      if(totalsRow&&totalsRow[col]!==undefined&&totalsRow[col]!==''){rawVal=n(totalsRow[col]);subLabel='Report Total';}
+      const hi=m.pri>=9;
+      return`<div class="stat-card"><div style="font-size:10px;font-weight:700;color:var(--text-lo);text-transform:uppercase;letter-spacing:0.11em;margin-bottom:8px;">${esc(subLabel)}</div><div class="serif" style="font-size:22px;font-weight:700;color:${hi?'var(--accent)':'var(--text-hi)'};margin-bottom:4px;">${esc(m.fmt(rawVal))}</div><div style="font-size:12px;color:var(--text-mid);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${esc(col)}">${esc(col)}</div></div>`;
+    }).filter(Boolean).join('');
+    sr.innerHTML=totalRowsCard+statCardsHtml;
+    content.appendChild(sr);
+
+    // ---- CHARTS ----
+    const cg=document.createElement('div');
+    cg.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:24px;margin-bottom:32px;';
+    content.appendChild(cg);
+    let chartCount=0;
+
+    // Group by dimension: bar chart per metric
+    if(dimCol&&metricCols.length){
+      const groups={};
+      dataRows.forEach(r=>{
+        const k=String(r[dimCol]||'(blank)').trim().slice(0,30);
+        if(!groups[k])groups[k]={};
+        metricCols.forEach(col=>{
+          if(!groups[k][col])groups[k][col]=[];
+          groups[k][col].push(n(r[col]));
+        });
+      });
+      const dimKeys=Object.keys(groups).sort((a,b)=>{
+        const mc=metricCols[0];
+        return(groups[b][mc]||[]).reduce((x,y)=>x+y,0)-(groups[a][mc]||[]).reduce((x,y)=>x+y,0);
+      }).slice(0,20);
+
+      metricCols.slice(0,4).forEach(col=>{
+        if(chartCount>=6)return;
+        const m=colMeta(col);if(!m)return;
+        const vals=dimKeys.map(k=>{
+          const arr=groups[k][col]||[];
+          if(!arr.length)return 0;
+          return m.stat==='sum'?arr.reduce((a,b)=>a+b,0):arr.reduce((a,b)=>a+b,0)/arr.length;
+        });
+        if(vals.every(v=>v===0))return;
+        const card=mkCard(col+' by '+dimCol);cg.appendChild(card);
+        const isT=['avg-time','total-time'].includes(m.type);
+        const isPct=['pct-frac','pct-dir'].includes(m.type);
+        const opts=cDefaults(isT?v=>fmtSec(v):isPct?v=>v.toFixed(1)+'%':undefined);
+        if(isT)opts.plugins.tooltip.callbacks={label:ctx=>fmtSec(ctx.parsed.y)};
+        if(isPct)opts.plugins.tooltip.callbacks={label:ctx=>ctx.parsed.y.toFixed(1)+'%'};
+        reg(new Chart(card.querySelector('canvas'),{type:'bar',data:{labels:dimKeys,datasets:[{label:col,data:vals,backgroundColor:COLORS,borderRadius:5,borderSkipped:false}]},options:opts}));
+        chartCount++;
+      });
+
+      // Stacked time breakdown if time cols exist
+      const timeCols=metricCols.filter(c=>colMeta(c)?.type==='total-time').slice(0,5);
+      if(timeCols.length>=2&&chartCount<6){
+        const card=mkCard('Time Breakdown by '+dimCol,260);cg.appendChild(card);
+        const stackColors=['rgba(29,233,216,0.75)','rgba(251,191,36,0.75)','rgba(167,139,250,0.75)','rgba(248,113,113,0.75)','rgba(52,211,153,0.55)'];
+        const o=cDefaults(v=>fmtHrs(v),{display:true,labels:{color:'rgba(255,255,255,0.5)',font:{size:11}}});
+        o.scales.x.stacked=true;o.scales.y.stacked=true;o.plugins.tooltip.callbacks={label:ctx=>ctx.dataset.label+': '+fmtHrs(ctx.parsed.y)};
+        reg(new Chart(card.querySelector('canvas'),{type:'bar',data:{labels:dimKeys,datasets:timeCols.map((col,i)=>({label:col,data:dimKeys.map(k=>{const arr=groups[k][col]||[];return arr.reduce((a,b)=>a+b,0);}),backgroundColor:stackColors[i],stack:'s',borderRadius:3}))},options:o}));
+        chartCount++;
+      }
+    }
+
+    // Time-series line chart (metric over dates)
+    if(dateCol&&metricCols.length&&chartCount<6){
+      const dateGroups={};
+      dataRows.forEach(r=>{
+        const dt=fmtDate(r[dateCol]);
+        if(!dateGroups[dt])dateGroups[dt]={};
+        metricCols.slice(0,3).forEach(col=>{
+          if(!dateGroups[dt][col])dateGroups[dt][col]=[];
+          dateGroups[dt][col].push(n(r[col]));
+        });
+      });
+      const sortedDates=Object.keys(dateGroups).sort();
+      if(sortedDates.length>=2){
+        // Pick top 1-3 count metrics for trend
+        const trendCols=metricCols.filter(c=>colMeta(c)?.type==='count').slice(0,3);
+        if(trendCols.length){
+          const trendColors=['rgba(29,233,216,1)','rgba(251,191,36,1)','rgba(248,113,113,1)'];
+          const trendBg=['rgba(29,233,216,0.07)','rgba(251,191,36,0.07)','rgba(248,113,113,0.07)'];
+          const card=mkCard(trendCols.length>1?'Daily Trend — '+trendCols.slice(0,3).join(' / '):'Daily Trend — '+trendCols[0]);cg.appendChild(card);
+          const o=cDefaults(null,trendCols.length>1?{display:true,labels:{color:'rgba(255,255,255,0.5)',font:{size:11}}}:{display:false});
+          reg(new Chart(card.querySelector('canvas'),{type:'line',data:{labels:sortedDates,datasets:trendCols.map((col,i)=>({label:col,data:sortedDates.map(dt=>{const arr=dateGroups[dt][col]||[];return arr.reduce((a,b)=>a+b,0);}),borderColor:trendColors[i],backgroundColor:trendBg[i],fill:true,tension:0.4,pointRadius:2,pointBackgroundColor:trendColors[i]}))},options:o}));
+          chartCount++;
+        }
+        // ASA / avg-time trend
+        const asaCols=metricCols.filter(c=>colMeta(c)?.type==='avg-time').slice(0,1);
+        if(asaCols.length&&chartCount<6){
+          const col=asaCols[0],m=colMeta(col);
+          const card=mkCard(col+' — Daily Trend');cg.appendChild(card);
+          const o=cDefaults(v=>fmtSec(v));o.plugins.tooltip.callbacks={label:ctx=>fmtSec(ctx.parsed.y)};
+          reg(new Chart(card.querySelector('canvas'),{type:'line',data:{labels:sortedDates,datasets:[{label:col,data:sortedDates.map(dt=>{const arr=dateGroups[dt][col]||[];return arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:0;}),borderColor:'rgba(251,191,36,1)',backgroundColor:'rgba(251,191,36,0.08)',fill:true,tension:0.4,pointRadius:2,pointBackgroundColor:'rgba(251,191,36,1)'}]},options:o}));
+          chartCount++;
+        }
+      }
+    }
+
+    // Login/Logout special: reason code pie
+    if(type==='agent-login-logout'){
+      const reasonCol=headers.find(h=>/logout.reason/i.test(h));
+      if(reasonCol&&chartCount<6){
+        const rGroups={};
+        dataRows.forEach(r=>{const k=String(r[reasonCol]||'Unknown').trim();rGroups[k]=(rGroups[k]||0)+1;});
+        const rKeys=Object.keys(rGroups).sort((a,b)=>rGroups[b]-rGroups[a]).slice(0,8);
+        if(rKeys.length>=2){
+          const card=mkCard('Logout Reason Distribution',260);cg.appendChild(card);
+          const o={responsive:true,maintainAspectRatio:true,plugins:{legend:{position:'right',labels:{color:'rgba(255,255,255,0.55)',font:{size:11},padding:12}},tooltip:{backgroundColor:'rgba(6,16,30,0.95)',titleColor:'rgba(255,255,255,0.9)',bodyColor:'rgba(255,255,255,0.65)',borderColor:'rgba(29,233,216,0.25)',borderWidth:1}}};
+          reg(new Chart(card.querySelector('canvas'),{type:'doughnut',data:{labels:rKeys,datasets:[{data:rKeys.map(k=>rGroups[k]),backgroundColor:COLORS,borderWidth:2,borderColor:'var(--bg-card)'}]},options:o}));
+          chartCount++;
+        }
+      }
+    }
+
+    // Agent Trace special: state distribution pie
+    if(type==='agent-trace'){
+      const stateCol=headers.find(h=>/^state$/i.test(h));
+      if(stateCol&&chartCount<6){
+        const sGroups={};
+        dataRows.forEach(r=>{const k=String(r[stateCol]||'Unknown').trim();sGroups[k]=(sGroups[k]||0)+1;});
+        const sKeys=Object.keys(sGroups).sort((a,b)=>sGroups[b]-sGroups[a]);
+        if(sKeys.length>=2){
+          const card=mkCard('State Distribution',260);cg.appendChild(card);
+          const o={responsive:true,maintainAspectRatio:true,plugins:{legend:{position:'right',labels:{color:'rgba(255,255,255,0.55)',font:{size:11},padding:12}},tooltip:{backgroundColor:'rgba(6,16,30,0.95)',titleColor:'rgba(255,255,255,0.9)',bodyColor:'rgba(255,255,255,0.65)',borderColor:'rgba(29,233,216,0.25)',borderWidth:1}}};
+          reg(new Chart(card.querySelector('canvas'),{type:'doughnut',data:{labels:sKeys,datasets:[{data:sKeys.map(k=>sGroups[k]),backgroundColor:COLORS,borderWidth:2,borderColor:'var(--bg-card)'}]},options:o}));
+          chartCount++;
+        }
+      }
+    }
+
+    if(chartCount===0){
+      cg.innerHTML='<p style="color:var(--text-lo);font-size:13px;padding:8px;">No chart-able columns detected. Showing data table below.</p>';
+    }
+
+    // ---- DATA TABLE ----
+    const tc=document.createElement('div');tc.className='chart-card';
+    const displayCols=headers.slice(0,20);
+    tc.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;"><h2 class="serif" style="font-size:20px;font-weight:700;color:var(--text-hi);">${esc(sheetName)} — Full Data</h2><input type="text" class="search-input" placeholder="Search…" oninput="smartFilter(this,${si})" /></div><div style="overflow-x:auto;"><table class="data-table" id="smart-table-${si}"><thead><tr>${displayCols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody id="smart-body-${si}">${renderSmartRows(dataRows,displayCols)}</tbody></table></div>`;
+    content.appendChild(tc);
+
+    // store for filter
+    window['__smartRows_'+si]=dataRows;
+    window['__smartCols_'+si]=displayCols;
+  });
+}
+
+function renderSmartRows(rows,cols){
+  return rows.slice(0,200).map(r=>'<tr>'+cols.map(c=>{
+    const m=colMeta(c),v=r[c];
+    let disp=String(v??'');
+    if(m&&v!==''&&v!==null&&v!==undefined){
+      const nv=n(v);
+      if(m.type==='avg-time'||m.type==='total-time')disp=m.fmt(nv);
+      else if(m.type==='pct-frac')disp=(nv*100).toFixed(1)+'%';
+      else if(m.type==='pct-dir')disp=nv.toFixed(1)+'%';
+      else if(m.type==='count')disp=nv?fmtNum(nv):'0';
+    }
+    const isN=m&&m.type!=='dimension';
+    return`<td class="${isN?'td-num':''}">${esc(disp)}</td>`;
+  }).join('')+'</tr>').join('');
+}
+
+function smartFilter(input,si){
+  const q=input.value.toLowerCase();
+  const allRows=window['__smartRows_'+si]||[];
+  const cols=window['__smartCols_'+si]||[];
+  const filtered=q?allRows.filter(r=>cols.some(c=>String(r[c]??'').toLowerCase().includes(q))):allRows;
+  document.getElementById('smart-body-'+si).innerHTML=renderSmartRows(filtered,cols);
+}
+
+// ================================================================
+// UTIL
+// ================================================================
+function tog(id){const el=document.getElementById(id),cv=document.getElementById('cv_'+id);if(!el)return;const open=el.style.display==='none';el.style.display=open?'block':'none';if(cv)cv.style.transform=open?'rotate(180deg)':'';}
+function goBack(){destroyAll();document.getElementById('dashboard-screen').style.display='none';document.getElementById('upload-screen').style.display='flex';document.getElementById('upload-status').style.display='none';fileInput.value='';}
+
+// ================================================================
+// SAVE PDF
+// ================================================================
+function savePDF(){
+  const btn=document.getElementById('save-pdf-btn');
+  btn.disabled=true;
+  btn.innerHTML='<div class="spinner" style="width:13px;height:13px;border-width:2px;"></div> Generating…';
+
+  const title=document.getElementById('dashboard-title').textContent||'CMS Report';
+  const fileName=title.replace(/[^a-z0-9]/gi,'_').toLowerCase()+'_'+new Date().toISOString().slice(0,10)+'.pdf';
+
+  // Temporarily expand all collapsed sections so they appear in PDF
+  const collapsed=[];
+  document.querySelectorAll('[id^="ag_"]').forEach(el=>{
+    if(el.style.display==='none'){collapsed.push(el.id);el.style.display='block';}
+  });
+
+  const content=document.getElementById('dashboard-content');
+  const opt={
+    margin:[10,8,10,8],
+    filename:fileName,
+    image:{type:'jpeg',quality:0.97},
+    html2canvas:{
+      scale:1.5,
+      useCORS:true,
+      backgroundColor:'#0f2035',
+      logging:false,
+    },
+    jsPDF:{unit:'mm',format:'a3',orientation:'landscape'},
+    pagebreak:{mode:['avoid-all','css','legacy']},
+  };
+
+  html2pdf().set(opt).from(content).save()
+    .then(()=>{
+      // Re-collapse sections that were collapsed
+      collapsed.forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
+      btn.disabled=false;
+      btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Save PDF';
+    })
+    .catch(err=>{
+      console.error(err);
+      collapsed.forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
+      btn.disabled=false;
+      btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Save PDF';
+    });
+}
+</script>
+</body>
+</html>
